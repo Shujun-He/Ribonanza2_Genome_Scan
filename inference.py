@@ -13,7 +13,7 @@ import yaml
 from Scoring import get_scores, get_scores_parallel, get_ok_scores
 from Functions import *
 from Bio import SeqIO
-import torch_tensorrt
+#import torch_tensorrt
 
 
 parser = argparse.ArgumentParser(description='Deep Learning Hyperparameters')
@@ -25,7 +25,7 @@ args = parser.parse_args()
 
 config = load_config_from_yaml(args.config_path)
 
-accelerator = Accelerator(mixed_precision='fp16')
+accelerator = Accelerator(mixed_precision='bf16')
 
 config.print()
 
@@ -106,10 +106,10 @@ def inference_chromosome(sequence,chromosome):
 
 
 model=finetuned_RibonanzaNet(load_config_from_yaml("configs/pairwise.yaml"))
-model.load_state_dict(torch.load("RibonanzaNet-SS.pt",map_location='cpu'))
+model.load_state_dict(torch.load("../weights/RibonanzaNet-SS.pt",map_location='cpu'))
 
 reactivity_model=RibonanzaNet(load_config_from_yaml("configs/pairwise.yaml"))
-reactivity_model.load_state_dict(torch.load("RibonanzaNet.pt",map_location='cpu'))
+reactivity_model.load_state_dict(torch.load("../weights/RibonanzaNet.pt",map_location='cpu'))
 #exit()
 
 diag_mask=mask_diagonal(np.ones((config.window_size,config.window_size)))
@@ -127,13 +127,13 @@ start_time = time.time()
 restart=False
 for record in SeqIO.parse(args.genome_file, "fasta"):
     print(record.id)
-    if record.id=="NC_000004.12":
-        restart=True
+    # if record.id=="NC_000004.12":
+    #     restart=True
     #print(record.id)
-    if restart:
-        chromosome=record.id
-        sequence=str(record.seq).upper().replace('T','U')
-        inference_chromosome(sequence,chromosome)
+    #if restart:
+    chromosome=record.id
+    sequence=str(record.seq).upper().replace('T','U')
+    inference_chromosome(sequence,chromosome)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
