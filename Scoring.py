@@ -2,11 +2,12 @@ import argparse
 import numpy as np
 from Functions import detect_crossed_pairs
 #from hungarian import _hungarian
-from arnie_utils import *
+#from arnie_utils import *
 from tqdm import tqdm
 import pandas as pd
 import os
 from ok_score import *
+import polars as pl
 
 #create dummy arnie config
 with open('arnie_file.txt','w+') as f:
@@ -15,6 +16,7 @@ with open('arnie_file.txt','w+') as f:
 os.environ['ARNIEFILE'] = 'arnie_file.txt'
 
 from arnie.pk_predictors import _hungarian
+from arnie.utils import post_process_struct, convert_dotbracket_to_bp_list
 
 def get_scores(bpps,seq,theta=0.5):
     mapping = {0: 'A', 1: 'C', 2: 'G', 3: 'U', 4:'N'}
@@ -148,4 +150,76 @@ def get_ok_scores(df):
 
     return df
 
+def get_helices(bp_list, allowed_buldge_len=0):
+    #bp_list = convert_dotbracket_to_bp_list(s, allow_pseudoknots=True)
+    bp_list = bp_list[:]
+    helices = []
+    current_helix = []
+    while bp_list != []:
+        current_bp = bp_list.pop(0)
+        if current_helix == []:
+            current_helix.append(current_bp)
+        else:
+            in_helix_left = list(range(current_helix[-1][0] + 1, current_helix[-1][0] + allowed_buldge_len + 2))
+            in_helix_right = list(range(current_helix[-1][1] - allowed_buldge_len - 1, current_helix[-1][1]))
+            if current_bp[0] in in_helix_left and current_bp[1] in in_helix_right:
+                current_helix.append(current_bp)
+            else:
+                helices.append(current_helix)
+                current_helix = [current_bp]
+    helices.append(current_helix)
+    return helices
 
+def get_ok_scores_exclude_singlets(df):
+    # Initialize lists for storing the calculated scores
+    classic_scores = []
+    crossed_pair_scores = []
+    crossed_pair_quality_scores = []
+    ok_score = []
+
+    shape=df['SHAPE'].to_numpy()
+    structures=df['structure'].to_list()
+
+    structures=[post_process_struct(s,0,2) for s in structures]
+
+    df=df.with_columns(pl.Series("structure_no_singlet",structures))
+
+    # cp_helices=[get_helices(detect_crossed_pairs(convert_dotbracket_to_bp_list(s, allow_pseudoknots=True))[0]) for s in structures]
+
+    # min_len_cp_helix=[]
+    # for h in cp_helices:
+    #     if len(h)>0:
+    #         min_len_cp_helix.append(min([len(stem) for stem in h]))
+    #     else:
+    #         min_len_cp_helix.append(-1)
+    min_len_cp_helix=[]
+    for s in structures:
+        bps=convert_dotbracket_to_bp_list(s, allow_pseudoknots=True)
+        crossed_pairs=detect_crossed_pairs(bps)[0]
+        crossed_pairs.sort()
+        helices=get_helices(crossed_pairs)
+        if len(helices)>0:
+            min_len_cp_helix.append(min([len(stem) for stem in helices]))
+        else:
+            min_len_cp_helix.append(-1)
+
+    df=df.with_columns(pl.Series("min_len_cp_helix",min_len_cp_helix))
+    # Loop through each shape profile and structure, calculate the scores
+    # for shape_profile, dbn in zip(shape, structures):
+    #     shape_profile = list(shape_profile)
+    #     classic_score = calculateEternaClassicScore(dbn, shape_profile, 0, 0)
+    #     crossed_pair_score, crossed_pair_quality_score = calculateCrossedPairQualityScore(dbn, shape_profile, 0, 0)
+        
+    #     classic_scores.append(classic_score)
+    #     crossed_pair_scores.append(crossed_pair_score)
+    #     crossed_pair_quality_scores.append(crossed_pair_quality_score)
+    #     ok_score.append(classic_score/2.+crossed_pair_quality_score/2.)
+
+    # df = df.with_columns([
+    #     pl.Series('classic_score_no_singlet', classic_scores, dtype=pl.Float32),
+    #     pl.Series('crossed_pair_score_no_singlet', crossed_pair_scores, dtype=pl.Float32),
+    #     pl.Series('crossed_pair_quality_score_no_singlet', crossed_pair_quality_scores, dtype=pl.Float32),
+    #     pl.Series('ok_score_no_singlet', ok_score, dtype=pl.Float32)
+    # ])
+
+    return df
