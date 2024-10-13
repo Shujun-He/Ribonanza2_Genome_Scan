@@ -2,6 +2,8 @@ import os
 import numpy as np
 import json
 import yaml
+import re
+
 def dedupe_lists(list_of_lists):
     # Step 1: Convert each sublist to a sorted tuple
     tuple_set = {tuple(sorted(sublist)) for sublist in list_of_lists}
@@ -283,3 +285,8 @@ def mask_diagonal(matrix, mask_value=0):
             if abs(i - j) < 4:
                 matrix[i][j] = mask_value
     return matrix
+
+def sanitize_chromosome_name(name):
+    # Remove or replace characters that are problematic for directory names
+    # Keep alphanumeric characters, underscores, and hyphens
+    return re.sub(r'[^\w\-]', '_', name)

@@ -131,7 +131,7 @@ for record in SeqIO.parse(args.genome_file, "fasta"):
     #     restart=True
     #print(record.id)
     #if restart:
-    chromosome=record.id
+    chromosome=sanitize_chromosome_name(record.id)
     sequence=str(record.seq).upper().replace('T','U')
     inference_chromosome(sequence,chromosome)
 
