@@ -3,6 +3,36 @@ import numpy as np
 import json
 import yaml
 import re
+import torch
+
+def square_to_sparse(matrix):
+    """
+    Convert a square matrix to a sparse format where only the top index and value
+    for each column are stored in an Lx2 tensor.
+    
+    Args:
+        matrix (torch.Tensor): Square input matrix
+        
+    Returns:
+        torch.Tensor: Lx2 tensor where L is the number of columns
+                     First column contains indices, second contains values
+    """
+    if not matrix.size(0) == matrix.size(1):
+        raise ValueError("Input must be a square matrix")
+    
+    n = matrix.size(0)
+    result = torch.zeros((n, 2), dtype=torch.float)
+    
+    for col in range(n):
+        # Get the column
+        column = matrix[:, col]
+        # Find the index of the maximum value
+        max_idx = torch.argmax(column)
+        # Store the index and value
+        result[col, 0] = max_idx
+        result[col, 1] = column[max_idx]
+    
+    return result
 
 def dedupe_lists(list_of_lists):
     # Step 1: Convert each sublist to a sorted tuple

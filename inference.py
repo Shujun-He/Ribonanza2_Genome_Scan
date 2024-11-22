@@ -71,11 +71,28 @@ def inference_chromosome(sequence,chromosome):
                 #reactivity=reactivity_model(src,src_mask=torch.ones(*src.shape[:2]).to(src.device))
                 reactivity=reactivity_model(src)
 
-        output = output.cpu().numpy()
-        reactivity = reactivity.cpu().numpy()
+        #output = output.cpu().numpy()
+        #reactivity = reactivity.cpu().numpy()
         #all_output = accelerator.gather(output).cpu().numpy()
-        src = src.cpu().numpy()
-        start_position = batch["start_position"].cpu().numpy()
+        #src = src.cpu().numpy()
+        start_position = batch["start_position"]#.numpy()
+
+        # sparse_bpp=[square_to_sparse(m) for m in output]
+        # sparse_bpp=torch.stack(sparse_bpp)
+        sparse_bpp_values,sparse_bpp_index =output.max(-1)
+        sparse_bpp=torch.stack([sparse_bpp_values,sparse_bpp_index],-1)
+        # print(sparse_bpp_index)
+        # print(sparse_bpp.shape)
+        # exit()
+        tensors_to_save = {
+            'src': src.cpu(),
+            'bpp': output.cpu(),
+            'sparse_bpp':sparse_bpp.cpu(),
+            'reactivity': reactivity.cpu(),
+            'start_position': start_position.cpu()
+        }
+        filename = f"predictions/{chromosome}/batch{idx}_{accelerator.process_index}.pt"
+        torch.save(tensors_to_save, filename)
 
         # try:
         #     df=get_scores(output,src)
@@ -86,19 +103,19 @@ def inference_chromosome(sequence,chromosome):
         #     df.to_parquet(f"predictions/{chromosome}/batch{idx}_{accelerator.process_index}.parquet")
         # except:
         #     pass
-        try:
-            df=get_scores(output,src)
-            #df=get_scores_parallel(output,src,pool)
-            df['start_position']=start_position
-            df['SHAPE']=list(reactivity[:,:,0])
-            df['DMS']=list(reactivity[:,:,1])
-            df=get_ok_scores(df)
-            df.to_parquet(f"predictions/{chromosome}/batch{idx}_{accelerator.process_index}.parquet")
-        except Exception as e:
-            print(f"An error occurred: {str(e)}")
-            # Optionally, you can print more detailed traceback information:
-            import traceback
-            print(traceback.format_exc())
+        # try:
+        #     df=get_scores(output,src)
+        #     #df=get_scores_parallel(output,src,pool)
+        #     df['start_position']=start_position
+        #     df['SHAPE']=list(reactivity[:,:,0])
+        #     df['DMS']=list(reactivity[:,:,1])
+        #     df=get_ok_scores(df)
+        #     df.to_parquet(f"predictions/{chromosome}/batch{idx}_{accelerator.process_index}.parquet")
+        # except Exception as e:
+        #     print(f"An error occurred: {str(e)}")
+        #     # Optionally, you can print more detailed traceback information:
+        #     import traceback
+        #     print(traceback.format_exc())
 
 # sequence_file=f'chromosomes/{args.chromosome_file}'
 # sequence=open(sequence_file).read()
@@ -126,14 +143,15 @@ reactivity_model=torch.compile(reactivity_model)
 start_time = time.time()
 restart=False
 for record in SeqIO.parse(args.genome_file, "fasta"):
-    print(record.id)
-    # if record.id=="NC_000004.12":
-    #     restart=True
-    #print(record.id)
-    #if restart:
-    chromosome=sanitize_chromosome_name(record.id)
-    sequence=str(record.seq).upper().replace('T','U')
-    inference_chromosome(sequence,chromosome)
+    if record.id.startswith('NC'):
+        print(record.id)
+        # if record.id=="NC_000004.12":
+        #     restart=True
+        #print(record.id)
+        #if restart:
+        chromosome=sanitize_chromosome_name(record.id)
+        sequence=str(record.seq).upper().replace('T','U')
+        inference_chromosome(sequence,chromosome)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
