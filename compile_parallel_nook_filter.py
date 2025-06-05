@@ -29,7 +29,7 @@ def process_file(file, folder, window):
     sequence = df['sequence'].to_list()
     
     for i, (s_pos, seq) in enumerate(zip(start, sequence)):
-        filter[i] = (df[i, 'ok_score'] > 80)
+        #filter[i] = (df[i, 'ok_score'] > 80)
         filter[i] = filter[i] and (df[i, 'cross_pair_confidence'] > 0)
         filter[i] = filter[i] and (calculate_gc_content(seq) < 0.9)
         filter[i] = filter[i] and (calculate_au_content(seq) < 0.9)
@@ -48,7 +48,7 @@ def parallel_process_files(pool, files, folder, window):
 
 def main():
     folder = f"{args.organism}_predictions"
-    os.makedirs(f"{args.organism}_compiled", exist_ok=True)
+    os.makedirs(f"{args.organism}_compiled_no_ok", exist_ok=True)
     pool = Pool(processes=cpu_count())
     for subfolder in os.listdir(folder):
         print(f"Processing {subfolder}...")
@@ -62,7 +62,7 @@ def main():
         all_data = pl.concat(dfs, how='vertical_relaxed')
         
         # Write the final concatenated DataFrame to a parquet file
-        all_data.write_parquet(f"{args.organism}_compiled/{subfolder}.parquet".replace("*",'-'))
+        all_data.write_parquet(f"{args.organism}_compiled_no_ok/{subfolder}.parquet".replace("*",'-'))
 
 if __name__ == "__main__":
     main()

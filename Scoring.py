@@ -10,10 +10,10 @@ from ok_score import *
 import polars as pl
 
 #create dummy arnie config
-with open('arnie_file.txt','w+') as f:
-    f.write("linearpartition: . \nTMP: /tmp")
+# with open('arnie_file.txt','w+') as f:
+#     f.write("linearpartition: . \nTMP: /tmp")
     
-os.environ['ARNIEFILE'] = 'arnie_file.txt'
+os.environ['ARNIEFILE'] = '../arnie_file.txt'
 
 from arnie.pk_predictors import _hungarian
 from arnie.utils import post_process_struct, convert_dotbracket_to_bp_list

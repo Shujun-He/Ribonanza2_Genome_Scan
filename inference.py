@@ -17,12 +17,14 @@ from Bio import SeqIO
 
 
 parser = argparse.ArgumentParser(description='Deep Learning Hyperparameters')
-parser.add_argument('--config_path', type=str, default="configs/pairwise.yaml")
-parser.add_argument('--genome_file', type=str, default="../../input/GRCh38_latest_genomic.fna")
+parser.add_argument('--config_path', type=str, default="configs/Rnet2.yaml")
+parser.add_argument('--genome_file', type=str, default="../renamed_genomes//homo.sapiens.fna")
 
 
 args = parser.parse_args()
 
+prefix=args.genome_file.split('/')[-1].split('.')[0]
+print("prefix",prefix)
 config = load_config_from_yaml(args.config_path)
 
 accelerator = Accelerator(mixed_precision='bf16')
@@ -31,17 +33,17 @@ config.print()
 
 
 os.environ["CUDA_VISIBLE_DEVICES"]=config.gpu_id
-os.system('mkdir predictions')
-os.system('mkdir plots')
-os.system('mkdir subs')
+os.system(f'mkdir {prefix}_predictions')
+os.system(f'mkdir {prefix}_plots')
+os.system(f'mkdir {prefix}_subs')
 
 def inference_chromosome(sequence,chromosome):
 
 
     print("doing inference for",chromosome)
 
-    os.system(f'mkdir predictions/')
-    os.system(f'mkdir predictions/{chromosome}')
+    os.system(f'mkdir {prefix}_predictions/')
+    os.system(f'mkdir {prefix}_predictions/{chromosome}')
 
     val_dataset=SlidingWindowTestRNAdataset(sequence,window_size=config.window_size, stride=config.stride)
     val_loader=DataLoader(val_dataset,batch_size=config.test_batch_size,shuffle=False,num_workers=4)
@@ -70,6 +72,10 @@ def inference_chromosome(sequence,chromosome):
 
                 #reactivity=reactivity_model(src,src_mask=torch.ones(*src.shape[:2]).to(src.device))
                 reactivity=reactivity_model(src)
+                r_2a3=reactivity[:,:,[1,3,5,7,9]].mean(-1,keepdim=True)
+                r_dms=reactivity[:,:,[0,2,4,6,8]].mean(-1,keepdim=True)
+                reactivity=torch.cat([r_2a3,r_dms],dim=-1)
+                #[:,:,[1,3,5,7,9]].mean(-1,keepdim=True)
 
         output = output.cpu().numpy()
         reactivity = reactivity.cpu().numpy()
@@ -93,7 +99,7 @@ def inference_chromosome(sequence,chromosome):
             df['SHAPE']=list(reactivity[:,:,0])
             df['DMS']=list(reactivity[:,:,1])
             df=get_ok_scores(df)
-            df.to_parquet(f"predictions/{chromosome}/batch{idx}_{accelerator.process_index}.parquet")
+            df.to_parquet(f"{prefix}_predictions/{chromosome}/batch{idx}_{accelerator.process_index}.parquet")
         except Exception as e:
             print(f"An error occurred: {str(e)}")
             # Optionally, you can print more detailed traceback information:
@@ -105,11 +111,11 @@ def inference_chromosome(sequence,chromosome):
 # chromosome=args.chromosome_file.strip('.txt')
 
 
-model=finetuned_RibonanzaNet(load_config_from_yaml("configs/pairwise.yaml"))
-model.load_state_dict(torch.load("../weights/RibonanzaNet-SS.pt",map_location='cpu'))
+model=finetuned_RibonanzaNet(load_config_from_yaml("configs/Rnet2.yaml"))
+model.load_state_dict(torch.load("/lustre/fs0/scratch/shujun/8m_exps/test32_saveweights/finetuned_weights/config_213.yaml.pt",map_location='cpu'))
 
-reactivity_model=RibonanzaNet(load_config_from_yaml("configs/pairwise.yaml"))
-reactivity_model.load_state_dict(torch.load("../weights/RibonanzaNet.pt",map_location='cpu'))
+reactivity_model=RibonanzaNet(load_config_from_yaml("configs/Rnet2.yaml"))
+reactivity_model.load_state_dict(torch.load("/lustre/fs0/scratch/shujun/8m_exps/test32/models/epoch_0/pytorch_model_fsdp.bin",map_location='cpu'))
 #exit()
 
 diag_mask=mask_diagonal(np.ones((config.window_size,config.window_size)))
@@ -123,6 +129,9 @@ model=torch.compile(model)
 reactivity_model=torch.compile(reactivity_model)
 
 
+model.eval()
+reactivity_model.eval()
+
 start_time = time.time()
 restart=False
 for record in SeqIO.parse(args.genome_file, "fasta"):
@@ -131,12 +140,16 @@ for record in SeqIO.parse(args.genome_file, "fasta"):
     #     restart=True
     #print(record.id)
     #if restart:
-    chromosome=sanitize_chromosome_name(record.id)
-    sequence=str(record.seq).upper().replace('T','U')
-    inference_chromosome(sequence,chromosome)
+
+
+    if record.id.startswith("NC_"):
+        
+        chromosome=sanitize_chromosome_name(record.id)
+        sequence=str(record.seq).upper().replace('T','U')
+        inference_chromosome(sequence,chromosome)
 
 end_time = time.time()
 elapsed_time = end_time - start_time
 
-with open("inference_stats.json", 'w') as file:
+with open(f"{prefix}_inference_stats.json", 'w') as file:
         json.dump({'Total_execution_time': elapsed_time}, file, indent=4)
